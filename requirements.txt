@@ -1,6 +1,5 @@
 python-telegram-bot
-flask
+flask[async]
 requests
 gunicorn
-asgiref>=3.8.1
 uvicorn>=0.32.0
