@@ -5,6 +5,15 @@ import os
 import asyncio
 from flask import Flask, request
 import json
+import threading
+import logging
+
+# Настраиваем логирование
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Создаём Flask-приложение
 app = Flask(__name__)
@@ -77,6 +86,16 @@ media_cache = {}
 # Создаём Telegram-бота
 application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
 
+# Создаём asyncio loop для обработки асинхронных задач
+loop = asyncio.new_event_loop()
+
+# Запускаем loop в отдельном потоке
+def run_loop():
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+threading.Thread(target=run_loop, daemon=True).start()
+
 def build_menu():
     keyboard = [
         [InlineKeyboardButton("Получить задание 📝", callback_data="task")],
@@ -90,8 +109,15 @@ async def send_media(user_id, context, media_file, media_type="photo"):
     file_path = os.path.join(MEDIA_PATH, media_file)
     file_key = f"{media_file}_{media_type}"
     
+    logger.info(f"Attempting to send media: {media_file} (type: {media_type}) to user {user_id}")
+    
     if file_key not in media_cache:
         try:
+            if not os.path.exists(file_path):
+                logger.error(f"Media file not found: {file_path}")
+                await context.bot.send_message(user_id, "Ошибка: Медиафайл не найден! 🚫")
+                return
+            
             with open(file_path, 'rb') as file:
                 if media_type == "photo":
                     msg = await context.bot.send_photo(user_id, file)
@@ -103,25 +129,34 @@ async def send_media(user_id, context, media_file, media_type="photo"):
                     msg = await context.bot.send_animation(user_id, file)
                     file_id = msg.animation.file_id
                 media_cache[file_key] = file_id
+                logger.info(f"Media cached: {file_key} with file_id {file_id}")
         except FileNotFoundError:
+            logger.error(f"FileNotFoundError: Media file not found: {file_path}")
             await context.bot.send_message(user_id, "Ошибка: Медиафайл не найден! 🚫")
             return
         except Exception as e:
+            logger.error(f"Error sending media {media_file}: {str(e)}")
             await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
             return
     else:
         file_id = media_cache[file_key]
-        if media_type == "photo":
-            await context.bot.send_photo(user_id, file_id)
-        elif media_type == "video":
-            await context.bot.send_video(user_id, file_id)
-        elif media_type == "animation":
-            await context.bot.send_animation(user_id, file_id)
+        try:
+            if media_type == "photo":
+                await context.bot.send_photo(user_id, file_id)
+            elif media_type == "video":
+                await context.bot.send_video(user_id, file_id)
+            elif media_type == "animation":
+                await context.bot.send_animation(user_id, file_id)
+            logger.info(f"Media sent from cache: {file_key} to user {user_id}")
+        except Exception as e:
+            logger.error(f"Error sending cached media {file_key}: {str(e)}")
+            await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
 
 async def start(update: Update, context):
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
+    logger.info(f"Processing /start command for user {user_id}")
     await update.message.reply_text(task_text, reply_markup=build_menu())
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "photo")
@@ -130,6 +165,8 @@ async def task(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
+
+    logger.info(f"Processing /task command for user {user_id}, progress: {progress}")
 
     if progress < 5:
         task_text, media_file = random.choice(tasks["beginner"])
@@ -148,6 +185,7 @@ async def task(update: Update, context):
 
 async def extreme(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+    logger.info(f"Processing /extreme command for user {user_id}")
     task_text, media_file = random.choice(tasks["extreme"])
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
@@ -159,6 +197,7 @@ async def extreme(update: Update, context):
 
 async def earn(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+    logger.info(f"Processing /earn command for user {user_id}")
     task_text, media_file = random.choice(tasks["earn"])
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
@@ -170,6 +209,7 @@ async def earn(update: Update, context):
 
 async def hypno(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
+    logger.info(f"Processing /hypno command for user {user_id}")
     hypno_tasks = [
         ("Смотри на эту гифку и повторяй: 'Я сиси Госпожи' 10 раз! 🌀\nКак выполнить: Смотри на анимацию и громко повторяй фразу! 📢", "hypno_1.gif"),
         ("Глаза на гифку, сиси. Ты моя шлюшка навсегда! 👁️\nКак выполнить: Смотри 1 минуту, представляй моё господство! 👑", "hypno_2.gif"),
@@ -212,6 +252,7 @@ async def hypno(update: Update, context):
 async def button(update: Update, context):
     query = update.callback_query
     await query.answer()
+    logger.info(f"Processing button callback: {query.data} for user {query.message.chat_id}")
     if query.data == "task":
         await task(update, context)
     elif query.data == "extreme":
@@ -232,23 +273,38 @@ application.add_handler(CallbackQueryHandler(button))
 # Webhook-роут для Telegram
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update_data = request.get_json()
-    update = Update.de_json(update_data, application.bot)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(application.process_update(update))
-    return "OK", 200
+    try:
+        logger.info("Received webhook request")
+        update_data = request.get_json()
+        if not update_data:
+            logger.error("No JSON data in webhook request")
+            return "No data", 400
+        
+        update = Update.de_json(update_data, application.bot)
+        if not update:
+            logger.error("Failed to parse update from JSON")
+            return "Invalid update", 400
+        
+        logger.info(f"Processing update: {update.update_id}")
+        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Error in webhook: {str(e)}", exc_info=True)
+        return "Internal Server Error", 500
 
 # Главный роут для Render
 @app.route("/")
 def index():
+    logger.info("Received request to / endpoint")
     return "Bot is running!"
 
 # Настройка Webhook при запуске
 async def set_webhook():
     webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"  # Замените на ваш URL после деплоя
+    logger.info(f"Setting webhook to {webhook_url}")
     await application.bot.set_webhook(webhook_url)
 
 # Запускаем Webhook при старте
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
+    logger.info("Starting application and setting webhook")
+    asyncio.run_coroutine_threadsafe(set_webhook(), loop)
