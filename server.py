@@ -5,7 +5,6 @@ import os
 import asyncio
 from flask import Flask, request
 import json
-import threading
 import logging
 
 # Настраиваем логирование
@@ -57,7 +56,7 @@ tasks = {
         ("Шагай как шлюха на каблуках! 👠\nКак выполнить: Надень туфли на высоком каблуке, чулки и мини-юбку, сними видео, где идёшь, виляя попкой, и говоришь 'Я твоя сиси на каблучках, Госпожа!' 🍑", "task.jpg"),
         ("Стань моей куклой в платье! 👗\nКак выполнить: Надень платье, лифчик с наполнителем, сделай макияж и сними видео, где крутишься и говоришь 'Я сиси Госпожи, готовая служить!' 🎥", "task.jpg"),
         ("Готовь попку как девочка! 🍩\nКак выполнить: Надень стринги, смажь игрушку, вставь её в попку и сними видео, где двигаешь бёдрами и стонешь 'Госпожа, трахни свою куклу!' 📸", "task.jpg"),
-        ("Кончи как шлюшка в белье! 👙\nКак выполнить: Надень кружевные трусики и лифчик, кончи на бельё, размажь сперму по ткани и сними фото с подписью 'Я грязная девочка для тебя, Госпожа!' 💦", "task.jpg"),
+        ("Кончи как шлюшка в белье! 👙\nКак выполнить: Надень кружевные трусики и лифчик, кончи на бельё, разотри сперму по ткани и сними фото с подписью 'Я грязная девочка для тебя, Госпожа!' 💦", "task.jpg"),
         ("Соси как моя сиси! 🍌\nКак выполнить: Надень чулки, возьми дилдо или банан, соси его с чавкающими звуками и сними видео, где говоришь 'Я твоя оральная шлюшка, Госпожа!' 🎤", "task.jpg"),
         ("Трахай себя как кукла! ✌️\nКак выполнить: Надень женское бельё, вставь два пальца в попку, двигай ими и сними видео с громкими стонами 'Госпожа, я твоя анальная девочка!' 🔥", "task.jpg")
     ],
@@ -65,16 +64,16 @@ tasks = {
         ("Соси себя как шлюха! 🍆\nКак выполнить: Надень чулки и лифчик, попробуй достать ртом до своего члена, сними видео своих усилий и скажи 'Я твоя грязная сиси, Госпожа!' 🎥", "extreme.jpg"),
         ("Кончи в рот как моя девочка! 💦\nКак выполнить: Накрась губы, кончи себе в рот, проглоти и сними видео с подписью 'Я глотаю для тебя, Госпожа!' 😋", "extreme.jpg"),
         ("Служи мне как рабыня! 👅\nКак выполнить: Надень ошейник и чулки, представь, что я сижу на твоём лице, и напиши длинный рассказ, как ты лижешь мою киску и умоляешь о наказании! 💦", "extreme.jpg"),
-        ("Кончи на лицо как шлюшка! 😈\nКак выполнить: Сделай макияж, кончи себе на лицо, размажь сперму по губам и щекам, сними фото с подписью 'Я твоя грязная кукла, Госпожа!' 📸", "extreme.jpg"),
+        ("Кончи на лицо как шлюшка! 😈\nКак выполнить: Сделай макияж, кончи себе на лицо, разотри сперму по губам и щекам, сними фото с подписью 'Я твоя грязная кукла, Госпожа!' 📸", "extreme.jpg"),
         ("Соси как моя сиси на каблуках! 🍭\nКак выполнить: Надень туфли и бельё, соси дилдо глубоко с чавканьем и сними видео, где говоришь 'Я твоя шлюха, Госпожа!' 🎤", "extreme.jpg"),
-        ("Играй со спермой как девочка! 💧\nКак выполнить: Надень лифчик, собери сперму после оргазма, размажь по губам и груди, сними селфи с подписью 'Я твоя грязная сиси!' 😘", "extreme.jpg"),
+        ("Играй со спермой как девочка! 💧\nКак выполнить: Надень лифчик, собери сперму после оргазма, разотри по губам и груди, сними селфи с подписью 'Я твоя грязная сиси!' 😘", "extreme.jpg"),
         ("Трахай попку как моя кукла! 🍑\nКак выполнить: Надень платье, вставь игрушку в попку, двигай ею и сними видео сзади, крича 'Госпожа, я твоя анальная шлюшка!' 🎥", "extreme.jpg"),
         ("Глотай как моя рабыня! 🍆\nКак выполнить: Накрасься, кончи на дилдо, оближи его и проглоти, сними видео с подписью 'Я твоя послушная девочка, Госпожа!' 😈", "extreme.jpg")
     ],
     "earn": [
         ("Стань шлюшкой за деньги! 💰\nКак выполнить: Надень бельё, чулки, сделай макияж, найди клиента за 5000 рублей. Сними видео, где виляешь попкой, и пришли скрин переписки Госпоже! 📱", "earn.mp4"),
-        ("Докажи, что ты моя проститутка! 💵\nКак выполнить: Надень каблуки и платье, делай минет (лижи головку, бери глубоко, стони как девочка), подставляй попку, размажь сперму по лицу. Сними отчёт с деньгами! 🎥", "earn.mp4"),
-        ("Заработай ротиком как сиси! 🍆\nКак выполнить: Накрась губы, соси медленно, играй язычком, кончи ему на лицо и размажь. Сними фото с деньгами и расскажи, как ты была шлюшкой! 📸", "earn.mp4"),
+        ("Докажи, что ты моя проститутка! 💵\nКак выполнить: Надень каблуки и платье, делай минет (лижи головку, бери глубоко, стони как девочка), подставляй попку, разотри сперму по лицу. Сними отчёт с деньгами! 🎥", "earn.mp4"),
+        ("Заработай ротиком как сиси! 🍆\nКак выполнить: Накрась губы, соси медленно, играй язычком, кончи ему на лицо и разотри. Сними фото с деньгами и расскажи, как ты была шлюшкой! 📸", "earn.mp4"),
         ("Покажи, как служишь за бабки! 💸\nКак выполнить: Надень чулки, после встречи (минет и секс) сними видео с деньгами, расскажи, как сосала, подставляла попку и играла со спермой как кукла! 🎤", "earn.mp4"),
         ("Обслужи двоих как моя девочка! 👬\nКак выполнить: Надень бельё и каблуки, соси одному, пока второй трахает твою попку. Сними видео и покажи деньги с подписью 'Я твоя шлюха, Госпожа!' 💰", "earn.mp4")
     ]
@@ -87,14 +86,26 @@ media_cache = {}
 application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
 
 # Создаём asyncio loop для обработки асинхронных задач
-loop = asyncio.new_event_loop()
+loop = asyncio.get_event_loop()
 
-# Запускаем loop в отдельном потоке
-def run_loop():
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
+# Функция для запуска бота
+def run_bot():
+    try:
+        # Запускаем приложение Telegram
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Error in run_bot: {str(e)}", exc_info=True)
 
-threading.Thread(target=run_loop, daemon=True).start()
+# Запускаем Webhook и Flask в одном потоке
+async def main():
+    # Настраиваем Webhook
+    webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"
+    logger.info(f"Setting webhook to {webhook_url}")
+    await application.bot.set_webhook(webhook_url)
+
+    # Запускаем Flask в асинхронном режиме
+    from werkzeug.serving import run_simple
+    run_simple('0.0.0.0', 10000, app, use_reloader=False)
 
 def build_menu():
     keyboard = [
@@ -135,7 +146,7 @@ async def send_media(user_id, context, media_file, media_type="photo"):
             await context.bot.send_message(user_id, "Ошибка: Медиафайл не найден! 🚫")
             return
         except Exception as e:
-            logger.error(f"Error sending media {media_file}: {str(e)}")
+            logger.error(f"Error sending media {media_file}: {str(e)}", exc_info=True)
             await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
             return
     else:
@@ -149,7 +160,7 @@ async def send_media(user_id, context, media_file, media_type="photo"):
                 await context.bot.send_animation(user_id, file_id)
             logger.info(f"Media sent from cache: {file_key} to user {user_id}")
         except Exception as e:
-            logger.error(f"Error sending cached media {file_key}: {str(e)}")
+            logger.error(f"Error sending cached media {file_key}: {str(e)}", exc_info=True)
             await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
 
 async def start(update: Update, context):
@@ -157,9 +168,13 @@ async def start(update: Update, context):
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
     logger.info(f"Processing /start command for user {user_id}")
-    await update.message.reply_text(task_text, reply_markup=build_menu())
-    await asyncio.sleep(1)
-    await send_media(user_id, context, media_file, "photo")
+    try:
+        await update.message.reply_text(task_text, reply_markup=build_menu())
+        await asyncio.sleep(1)
+        await send_media(user_id, context, media_file, "photo")
+    except Exception as e:
+        logger.error(f"Error in start handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(user_id, f"Ошибка в обработке команды /start: {str(e)} 🚨")
 
 async def task(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
@@ -175,37 +190,49 @@ async def task(update: Update, context):
     else:
         task_text, media_file = random.choice(tasks["advanced"])
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
-    else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
-    
-    await asyncio.sleep(1)
-    await send_media(user_id, context, media_file, "photo")
+    try:
+        if update.callback_query:
+            await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        else:
+            await update.message.reply_text(task_text, reply_markup=build_menu())
+        
+        await asyncio.sleep(1)
+        await send_media(user_id, context, media_file, "photo")
+    except Exception as e:
+        logger.error(f"Error in task handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(user_id, f"Ошибка в обработке команды /task: {str(e)} 🚨")
 
 async def extreme(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     logger.info(f"Processing /extreme command for user {user_id}")
     task_text, media_file = random.choice(tasks["extreme"])
-    if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
-    else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
-    
-    await asyncio.sleep(1)
-    await send_media(user_id, context, media_file, "photo")
+    try:
+        if update.callback_query:
+            await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        else:
+            await update.message.reply_text(task_text, reply_markup=build_menu())
+        
+        await asyncio.sleep(1)
+        await send_media(user_id, context, media_file, "photo")
+    except Exception as e:
+        logger.error(f"Error in extreme handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(user_id, f"Ошибка в обработке команды /extreme: {str(e)} 🚨")
 
 async def earn(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     logger.info(f"Processing /earn command for user {user_id}")
     task_text, media_file = random.choice(tasks["earn"])
-    if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
-    else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
-    
-    await asyncio.sleep(1)
-    await send_media(user_id, context, media_file, "video")
+    try:
+        if update.callback_query:
+            await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        else:
+            await update.message.reply_text(task_text, reply_markup=build_menu())
+        
+        await asyncio.sleep(1)
+        await send_media(user_id, context, media_file, "video")
+    except Exception as e:
+        logger.error(f"Error in earn handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(user_id, f"Ошибка в обработке команды /earn: {str(e)} 🚨")
 
 async def hypno(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
@@ -241,26 +268,34 @@ async def hypno(update: Update, context):
         ("Ты моя грязная игрушка! 🎎\nКак выполнить: Смотри и опиши, как я использую тебя! 🔥", "hypno_28.gif")
     ]
     task_text, media_file = random.choice(hypno_tasks)
-    if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
-    else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
-    
-    await asyncio.sleep(1)
-    await send_media(user_id, context, media_file, "animation")
+    try:
+        if update.callback_query:
+            await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        else:
+            await update.message.reply_text(task_text, reply_markup=build_menu())
+        
+        await asyncio.sleep(1)
+        await send_media(user_id, context, media_file, "animation")
+    except Exception as e:
+        logger.error(f"Error in hypno handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(user_id, f"Ошибка в обработке команды /hypno: {str(e)} 🚨")
 
 async def button(update: Update, context):
     query = update.callback_query
     await query.answer()
     logger.info(f"Processing button callback: {query.data} for user {query.message.chat_id}")
-    if query.data == "task":
-        await task(update, context)
-    elif query.data == "extreme":
-        await extreme(update, context)
-    elif query.data == "earn":
-        await earn(update, context)
-    elif query.data == "hypno":
-        await hypno(update, context)
+    try:
+        if query.data == "task":
+            await task(update, context)
+        elif query.data == "extreme":
+            await extreme(update, context)
+        elif query.data == "earn":
+            await earn(update, context)
+        elif query.data == "hypno":
+            await hypno(update, context)
+    except Exception as e:
+        logger.error(f"Error in button handler: {str(e)}", exc_info=True)
+        await context.bot.send_message(query.message.chat_id, f"Ошибка в обработке кнопки: {str(e)} 🚨")
 
 # Регистрируем обработчики
 application.add_handler(CommandHandler("start", start))
@@ -272,7 +307,7 @@ application.add_handler(CallbackQueryHandler(button))
 
 # Webhook-роут для Telegram
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     try:
         logger.info("Received webhook request")
         update_data = request.get_json()
@@ -286,7 +321,7 @@ def webhook():
             return "Invalid update", 400
         
         logger.info(f"Processing update: {update.update_id}")
-        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+        await application.process_update(update)
         return "OK", 200
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}", exc_info=True)
@@ -298,13 +333,7 @@ def index():
     logger.info("Received request to / endpoint")
     return "Bot is running!"
 
-# Настройка Webhook при запуске
-async def set_webhook():
-    webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"  # Замените на ваш URL после деплоя
-    logger.info(f"Setting webhook to {webhook_url}")
-    await application.bot.set_webhook(webhook_url)
-
-# Запускаем Webhook при старте
+# Запускаем приложение
 if __name__ == "__main__":
-    logger.info("Starting application and setting webhook")
-    asyncio.run_coroutine_threadsafe(set_webhook(), loop)
+    logger.info("Starting application")
+    asyncio.run(main())
