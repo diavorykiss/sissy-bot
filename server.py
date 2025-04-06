@@ -1,7 +1,6 @@
 import os
 import logging
 import asyncio
-import random
 from flask import Flask, request
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -290,21 +289,29 @@ application.add_handler(CallbackQueryHandler(button))
 async def initialize_application():
     logger.info("Инициализация Telegram Application")
     await application.initialize()
+    await application.start()
     logger.info("Установка вебхука")
     webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"
     await application.bot.set_webhook(webhook_url)
     logger.info(f"Вебхук установлен на {webhook_url}")
 
-# Вызов инициализации и установки вебхука при запуске
-try:
-    asyncio.run(initialize_application())
-except RuntimeError as e:
-    if "asyncio.run() cannot be called from a running event loop" in str(e):
-        # Если мы уже в асинхронном контексте (например, в Render), используем loop
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(initialize_application())
-    else:
-        raise e
+# Функция для завершения работы приложения
+async def shutdown_application():
+    logger.info("Завершение работы Telegram Application")
+    await application.stop()
+    await application.shutdown()
+
+# Запуск инициализации приложения при старте сервера
+@app.before_first_request
+def startup():
+    loop = asyncio.get_event_loop()
+    loop.create_task(initialize_application())
+
+# Завершение работы приложения при остановке сервера
+@app.teardown_appcontext
+def shutdown(exception=None):
+    loop = asyncio.get_event_loop()
+    loop.create_task(shutdown_application())
 
 # Маршрут для вебхука
 @app.route(f"/{TOKEN}", methods=["POST"])
