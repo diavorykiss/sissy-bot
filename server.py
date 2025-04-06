@@ -1,15 +1,19 @@
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 import random
 import os
 import asyncio
 from flask import Flask, request
+import json
 
 # Создаём Flask-приложение
 app = Flask(__name__)
 
+# Telegram Bot Token
 TOKEN = "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg"
 MEDIA_PATH = "media"
+
+# Медиафайлы
 media = {
     "start": ["start.jpg"],
     "task": ["task.jpg"],
@@ -17,6 +21,8 @@ media = {
     "earn": ["earn.mp4"],
     "hypno": [f"hypno_{i}.gif" for i in range(1, 29)]
 }
+
+# Задания
 tasks = {
     "beginner": [
         ("Стань моей гладкой девочкой! 🪒\nКак выполнить: Возьми бритву, нанеси ароматную пену и сбрей все волосы с ног, чтобы они сияли как у настоящей леди. Надень кружевные чулочки, сделай фото своих ножек в позе кокетливой куколки и отправь Госпоже! ✨", "task.jpg"),
@@ -64,8 +70,12 @@ tasks = {
         ("Обслужи двоих как моя девочка! 👬\nКак выполнить: Надень бельё и каблуки, соси одному, пока второй трахает твою попку. Сними видео и покажи деньги с подписью 'Я твоя шлюха, Госпожа!' 💰", "earn.mp4")
     ]
 }
+
 user_progress = {}
 media_cache = {}
+
+# Создаём Telegram-бота
+application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
 
 def build_menu():
     keyboard = [
@@ -108,7 +118,7 @@ async def send_media(user_id, context, media_file, media_type="photo"):
         elif media_type == "animation":
             await context.bot.send_animation(user_id, file_id)
 
-async def start(update, context):
+async def start(update: Update, context):
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
@@ -116,7 +126,7 @@ async def start(update, context):
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "photo")
 
-async def task(update, context):
+async def task(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
@@ -136,7 +146,7 @@ async def task(update, context):
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "photo")
 
-async def extreme(update, context):
+async def extreme(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
     if update.callback_query:
@@ -147,7 +157,7 @@ async def extreme(update, context):
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "photo")
 
-async def earn(update, context):
+async def earn(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
     if update.callback_query:
@@ -158,7 +168,7 @@ async def earn(update, context):
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "video")
 
-async def hypno(update, context):
+async def hypno(update: Update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     hypno_tasks = [
         ("Смотри на эту гифку и повторяй: 'Я сиси Госпожи' 10 раз! 🌀\nКак выполнить: Смотри на анимацию и громко повторяй фразу! 📢", "hypno_1.gif"),
@@ -199,7 +209,7 @@ async def hypno(update, context):
     await asyncio.sleep(1)
     await send_media(user_id, context, media_file, "animation")
 
-async def button(update, context):
+async def button(update: Update, context):
     query = update.callback_query
     await query.answer()
     if query.data == "task":
@@ -211,9 +221,7 @@ async def button(update, context):
     elif query.data == "hypno":
         await hypno(update, context)
 
-# Настройка Telegram-бота
-application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
-
+# Регистрируем обработчики
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("task", task))
 application.add_handler(CommandHandler("extreme", extreme))
@@ -223,22 +231,25 @@ application.add_handler(CallbackQueryHandler(button))
 
 # Webhook-роут для Telegram
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    update = request.get_json()
-    await application.process_update(update)
+def webhook():
+    update_data = request.get_json()
+    update = Update.de_json(update_data, application.bot)
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     return "OK", 200
 
 # Главный роут для Render
 @app.route("/")
-async def index():
+def index():
     return "Bot is running!"
 
-# Запуск Flask и Telegram-бота
-if __name__ == "__main__":
-    # Устанавливаем Webhook
-    import requests
+# Настройка Webhook при запуске
+async def set_webhook():
     webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"  # Замените на ваш URL после деплоя
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/setWebhook", data={"url": webhook_url})
-    
-    # Запускаем Flask
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    await application.bot.set_webhook(webhook_url)
+
+# Создаём asyncio loop
+loop = asyncio.get_event_loop()
+
+# Запускаем Webhook при старте
+if __name__ == "__main__":
+    loop.run_until_complete(set_webhook())
