@@ -85,27 +85,15 @@ media_cache = {}
 # Создаём Telegram-бота
 application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
 
-# Создаём asyncio loop для обработки асинхронных задач
-loop = asyncio.get_event_loop()
-
-# Функция для запуска бота
-def run_bot():
-    try:
-        # Запускаем приложение Telegram
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        logger.error(f"Error in run_bot: {str(e)}", exc_info=True)
-
-# Запускаем Webhook и Flask в одном потоке
-async def main():
-    # Настраиваем Webhook
+# Функция для настройки Webhook
+async def set_webhook():
     webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"
     logger.info(f"Setting webhook to {webhook_url}")
     await application.bot.set_webhook(webhook_url)
 
-    # Запускаем Flask в асинхронном режиме
-    from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', 10000, app, use_reloader=False)
+# Запускаем Webhook при старте
+loop = asyncio.get_event_loop()
+loop.run_until_complete(set_webhook())
 
 def build_menu():
     keyboard = [
@@ -333,7 +321,8 @@ def index():
     logger.info("Received request to / endpoint")
     return "Bot is running!"
 
-# Запускаем приложение
+# Запускаем приложение (для локального тестирования, не используется на Render)
 if __name__ == "__main__":
     logger.info("Starting application")
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=10000)
