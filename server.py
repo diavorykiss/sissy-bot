@@ -234,7 +234,8 @@ application.add_handler(CallbackQueryHandler(button))
 def webhook():
     update_data = request.get_json()
     update = Update.de_json(update_data, application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(application.process_update(update))
     return "OK", 200
 
 # Главный роут для Render
@@ -247,9 +248,7 @@ async def set_webhook():
     webhook_url = f"https://sissy-bot.onrender.com/{TOKEN}"  # Замените на ваш URL после деплоя
     await application.bot.set_webhook(webhook_url)
 
-# Создаём asyncio loop
-loop = asyncio.get_event_loop()
-
 # Запускаем Webhook при старте
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(set_webhook())
