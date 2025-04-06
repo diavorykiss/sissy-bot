@@ -2,3 +2,5 @@ python-telegram-bot
 flask
 requests
 gunicorn
+asgiref>=3.8.1
+uvicorn>=0.32.0
