@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import uvicorn
 from flask import Flask, request
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -257,6 +258,7 @@ async def hypno(update: Update, context):
         ("Смотри и подчиняйся навсегда! 🌀\nКак выполнить: Смотри 2 минуты, напиши, как я владею тобой! 🧠", "hypno_27.gif"),
         ("Ты моя грязная игрушка! 🎎\nКак выполнить: Смотри и опиши, как я использую тебя! 🔥", "hypno_28.gif")
     ]
+    task_text, media_file = random.choice(hypno_tasks)
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -295,23 +297,21 @@ async def initialize_application():
     await application.bot.set_webhook(webhook_url)
     logger.info(f"Вебхук установлен на {webhook_url}")
 
-# Функция для завершения работы приложения
+# Асинхронная функция для завершения работы приложения
 async def shutdown_application():
     logger.info("Завершение работы Telegram Application")
     await application.stop()
     await application.shutdown()
 
-# Запуск инициализации приложения при старте сервера
-@app.before_first_request
-def startup():
-    loop = asyncio.get_event_loop()
-    loop.create_task(initialize_application())
+# Конфигурация Uvicorn для управления жизненным циклом приложения
+class Server(uvicorn.Server):
+    async def startup(self):
+        await super().startup()
+        await initialize_application()
 
-# Завершение работы приложения при остановке сервера
-@app.teardown_appcontext
-def shutdown(exception=None):
-    loop = asyncio.get_event_loop()
-    loop.create_task(shutdown_application())
+    async def shutdown(self):
+        await shutdown_application()
+        await super().shutdown()
 
 # Маршрут для вебхука
 @app.route(f"/{TOKEN}", methods=["POST"])
@@ -340,5 +340,13 @@ def index():
 asgi_app = WsgiToAsgi(app)
 
 if __name__ == "__main__":
-    # Для локальной разработки
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    # Для запуска через Uvicorn
+    config = uvicorn.Config(
+        app="server:asgi_app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),
+        workers=1,
+        log_level="info"
+    )
+    server = Server(config=config)
+    asyncio.run(server.serve())
