@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-import uvicorn
+import random
 from flask import Flask, request
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -303,16 +303,6 @@ async def shutdown_application():
     await application.stop()
     await application.shutdown()
 
-# Конфигурация Uvicorn для управления жизненным циклом приложения
-class Server(uvicorn.Server):
-    async def startup(self):
-        await super().startup()
-        await initialize_application()
-
-    async def shutdown(self):
-        await shutdown_application()
-        await super().shutdown()
-
 # Маршрут для вебхука
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
@@ -339,14 +329,10 @@ def index():
 # Обёртка Flask-приложения для совместимости с ASGI
 asgi_app = WsgiToAsgi(app)
 
+# Инициализация приложения перед запуском сервера
+loop = asyncio.get_event_loop()
+loop.run_until_complete(initialize_application())
+
 if __name__ == "__main__":
-    # Для запуска через Uvicorn
-    config = uvicorn.Config(
-        app="server:asgi_app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 10000)),
-        workers=1,
-        log_level="info"
-    )
-    server = Server(config=config)
-    asyncio.run(server.serve())
+    # Для локальной разработки
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
