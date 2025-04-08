@@ -2,9 +2,11 @@ import logging
 import os
 import random
 import requests
+import json
+import time
 from flask import Flask, request
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from io import BytesIO
 
 # Настройка логирования
@@ -17,11 +19,31 @@ app = Flask(__name__)
 
 # Инициализация бота
 TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
-bot = Bot(token=TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0)
-
-# Базовый URL для файлов на GitHub
 GITHUB_RAW_URL = "https://github.com/diavorykiss/sissy-bot/raw/main/media/"
+
+# Путь для сохранения media_cache
+CACHE_FILE = "media_cache.json"
+
+# Загружаем media_cache из файла, если он существует
+def load_media_cache():
+    try:
+        with open(CACHE_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logger.error(f"Failed to load media_cache: {str(e)}")
+        return {}
+
+# Сохраняем media_cache в файл
+def save_media_cache(cache):
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
+    except Exception as e:
+        logger.error(f"Failed to save media_cache: {str(e)}")
+
+media_cache = load_media_cache()
 
 # Настройки медиа
 media = {
@@ -82,7 +104,6 @@ tasks = {
 }
 
 user_progress = {}
-media_cache = {}
 
 def build_menu():
     keyboard = [
@@ -93,70 +114,85 @@ def build_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# Функция для отправки медиа (синхронная версия, загружаем с GitHub)
-def send_media(user_id, context, media_file, media_type="photo"):
+# Функция для отправки медиа (асинхронная версия)
+async def send_media(user_id: int, context: ContextTypes.DEFAULT_TYPE, media_file: str, media_type: str = "photo"):
+    start_time = time.time()
     file_url = f"{GITHUB_RAW_URL}{media_file}"
     file_key = f"{media_file}_{media_type}"
     
     # Проверяем, есть ли file_id в кэше
     if file_key in media_cache:
         file_id = media_cache[file_key]
-        logger.info(f"Sending {media_type} with cached file_id {file_id} to user {user_id}")
+        logger.info(f"Using cached file_id {file_id} for {media_file}")
     else:
         # Загружаем файл с GitHub
         try:
+            download_start = time.time()
             response = requests.get(file_url)
-            response.raise_for_status()  # Проверяем, что запрос успешен
+            response.raise_for_status()
+            download_time = time.time() - download_start
+            logger.info(f"Downloaded {media_file} from GitHub in {download_time:.2f} seconds")
+            
             file_data = BytesIO(response.content)
-            file_data.name = media_file  # Устанавливаем имя файла для Telegram
+            file_data.name = media_file
             
             # Отправляем файл в Telegram
+            upload_start = time.time()
             if media_type == "photo":
-                msg = context.bot.send_photo(user_id, file_data)
+                msg = await context.bot.send_photo(user_id, file_data)
                 file_id = msg.photo[-1].file_id
             elif media_type == "video":
-                msg = context.bot.send_video(user_id, file_data)
+                msg = await context.bot.send_video(user_id, file_data)
                 file_id = msg.video.file_id
             elif media_type == "animation":
-                msg = context.bot.send_animation(user_id, file_data)
+                msg = await context.bot.send_animation(user_id, file_data)
                 file_id = msg.animation.file_id
+            upload_time = time.time() - upload_start
+            logger.info(f"Uploaded {media_type} to Telegram in {upload_time:.2f} seconds")
             
             # Кэшируем file_id
             media_cache[file_key] = file_id
-            logger.info(f"Uploaded {media_type} from {file_url} and cached file_id {file_id} for user {user_id}")
-            return  # Файл уже отправлен, выходим из функции
+            save_media_cache(media_cache)
+            logger.info(f"Cached file_id {file_id} for {media_file}")
+            total_time = time.time() - start_time
+            logger.info(f"Total time for {media_file}: {total_time:.2f} seconds")
+            return
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download {file_url}: {str(e)}")
-            context.bot.send_message(user_id, f"Ошибка: Не удалось загрузить медиафайл {media_file}! 🚫")
+            await context.bot.send_message(user_id, f"Ошибка: Не удалось загрузить медиафайл {media_file}! 🚫")
             return
         except Exception as e:
             logger.error(f"Failed to send {media_type} to user {user_id}: {str(e)}")
-            context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
+            await context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
             return
     
     # Отправляем файл по file_id
     try:
+        send_start = time.time()
         if media_type == "photo":
-            context.bot.send_photo(user_id, file_id)
+            await context.bot.send_photo(user_id, file_id)
         elif media_type == "video":
-            context.bot.send_video(user_id, file_id)
+            await context.bot.send_video(user_id, file_id)
         elif media_type == "animation":
-            context.bot.send_animation(user_id, file_id)
-        logger.info(f"Successfully sent {media_type} to user {user_id}")
+            await context.bot.send_animation(user_id, file_id)
+        send_time = time.time() - send_start
+        logger.info(f"Sent {media_type} with file_id in {send_time:.2f} seconds")
+        total_time = time.time() - start_time
+        logger.info(f"Total time for {media_file}: {total_time:.2f} seconds")
     except Exception as e:
         logger.error(f"Failed to send {media_type} to user {user_id}: {str(e)}")
-        context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
+        await context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
 
-# Обработчики команд (синхронные)
-def start(update: Update, context: CallbackContext) -> None:
+# Обработчики команд (асинхронные)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
     logger.info(f"User {user_id} started the bot")
-    update.message.reply_text(task_text, reply_markup=build_menu())
-    send_media(user_id, context, media_file, "photo")
+    await update.message.reply_text(task_text, reply_markup=build_menu())
+    await send_media(user_id, context, media_file, "photo")
 
-def task(update: Update, context: CallbackContext) -> None:
+async def task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
@@ -170,35 +206,35 @@ def task(update: Update, context: CallbackContext) -> None:
     
     logger.info(f"User {user_id} requested a task (progress: {progress})")
     if update.callback_query:
-        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        update.message.reply_text(task_text, reply_markup=build_menu())
+        await update.message.reply_text(task_text, reply_markup=build_menu())
     
-    send_media(user_id, context, media_file, "photo")
+    await send_media(user_id, context, media_file, "photo")
 
-def extreme(update: Update, context: CallbackContext) -> None:
+async def extreme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
     logger.info(f"User {user_id} requested an extreme task")
     if update.callback_query:
-        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        update.message.reply_text(task_text, reply_markup=build_menu())
+        await update.message.reply_text(task_text, reply_markup=build_menu())
     
-    send_media(user_id, context, media_file, "photo")
+    await send_media(user_id, context, media_file, "photo")
 
-def earn(update: Update, context: CallbackContext) -> None:
+async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
     logger.info(f"User {user_id} requested an earn task")
     if update.callback_query:
-        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        update.message.reply_text(task_text, reply_markup=build_menu())
+        await update.message.reply_text(task_text, reply_markup=build_menu())
     
-    send_media(user_id, context, media_file, "video")
+    await send_media(user_id, context, media_file, "video")
 
-def hypno(update: Update, context: CallbackContext) -> None:
+async def hypno(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     hypno_tasks = [
         ("Впитай мою власть, куколка! 🌀\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я стою над тобой, а ты целуешь мои туфли, повторяя 'Я твоя послушная игрушка, Госпожа!' Напиши, как ты чувствуешь моё господство! 👑", "hypno_1.gif"),
@@ -233,47 +269,54 @@ def hypno(update: Update, context: CallbackContext) -> None:
     task_text, media_file = random.choice(hypno_tasks)
     logger.info(f"User {user_id} requested a hypno task")
     if update.callback_query:
-        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        update.message.reply_text(task_text, reply_markup=build_menu())
+        await update.message.reply_text(task_text, reply_markup=build_menu())
     
-    send_media(user_id, context, media_file, "animation")
+    await send_media(user_id, context, media_file, "animation")
 
-def button(update: Update, context: CallbackContext) -> None:
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    query.answer()
+    await query.answer()
     if query.data == "task":
-        task(update, context)
+        await task(update, context)
     elif query.data == "extreme":
-        extreme(update, context)
+        await extreme(update, context)
     elif query.data == "earn":
-        earn(update, context)
+        await earn(update, context)
     elif query.data == "hypno":
-        hypno(update, context)
+        await hypno(update, context)
 
-# Добавляем обработчики в диспетчер
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("task", task))
-dispatcher.add_handler(CommandHandler("extreme", extreme))
-dispatcher.add_handler(CommandHandler("earn", earn))
-dispatcher.add_handler(CommandHandler("hypno", hypno))
-dispatcher.add_handler(CallbackQueryHandler(button))
+# Инициализация приложения
+application = Application.builder().token(TOKEN).build()
+
+# Добавляем обработчики
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("task", task))
+application.add_handler(CommandHandler("extreme", extreme))
+application.add_handler(CommandHandler("earn", earn))
+application.add_handler(CommandHandler("hypno", hypno))
+application.add_handler(CallbackQueryHandler(button))
 
 # Маршрут для обработки вебхуков
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
+    update = Update.de_json(request.get_json(force=True), application.bot)
     logger.info(f"Received update: {update}")
-    dispatcher.process_update(update)
+    application.process_update(update)
     return "OK", 200
 
 # Маршрут для установки вебхука
 @app.route("/setwebhook", methods=["GET"])
 def set_webhook():
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
-    return f"Webhook set to {webhook_url}", 200
+    success = application.bot.set_webhook(webhook_url)
+    if success:
+        logger.info(f"Webhook set to {webhook_url}")
+        return f"Webhook set to {webhook_url}", 200
+    else:
+        logger.error("Failed to set webhook")
+        return "Failed to set webhook", 500
 
 # Маршрут для проверки состояния (health check)
 @app.route("/", methods=["GET"])
@@ -286,11 +329,11 @@ if __name__ == "__main__":
     # Для локального тестирования
     port = int(os.getenv("PORT", 10000))
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'localhost')}/{TOKEN}"
-    bot.set_webhook(webhook_url)
+    application.bot.set_webhook(webhook_url)
     logger.info(f"Webhook set to {webhook_url}")
     app.run(host="0.0.0.0", port=port, debug=True)
 else:
     # Для продакшена (gunicorn)
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    bot.set_webhook(webhook_url)
+    application.bot.set_webhook(webhook_url)
     logger.info(f"Webhook set to {webhook_url}")
