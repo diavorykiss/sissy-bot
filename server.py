@@ -5,7 +5,8 @@ import requests
 import json
 import time
 import asyncio
-from flask import Flask, request
+import uvicorn
+from http import HTTPStatus
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from io import BytesIO
@@ -15,8 +16,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
 
 # Инициализация бота
 TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
@@ -299,6 +298,81 @@ application.add_handler(CommandHandler("earn", earn))
 application.add_handler(CommandHandler("hypno", hypno))
 application.add_handler(CallbackQueryHandler(button))
 
+# Асинхронная функция для обработки вебхуков
+async def webhook_handler(scope, receive, send):
+    if scope["type"] != "http":
+        return
+
+    method = scope["method"]
+    path = scope["path"]
+
+    # Health check endpoint
+    if method in ("GET", "HEAD") and path == "/":
+        await send({
+            "type": "http.response.start",
+            "status": HTTPStatus.OK,
+            "headers": [(b"content-type", b"text/plain")],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b"Bot is running",
+        })
+        return
+
+    # Webhook endpoint
+    if method == "POST" and path == f"/{TOKEN}":
+        try:
+            # Получаем тело запроса
+            body = b""
+            while True:
+                message = await receive()
+                if message.get("type") == "http.request":
+                    body += message.get("body", b"")
+                    if not message.get("more_body", False):
+                        break
+
+            # Парсим JSON
+            update_data = json.loads(body.decode("utf-8"))
+            update = Update.de_json(update_data, application.bot)
+            logger.info(f"Received update: {update}")
+
+            # Обрабатываем обновление
+            await application.process_update(update)
+
+            # Отправляем ответ
+            await send({
+                "type": "http.response.start",
+                "status": HTTPStatus.OK,
+                "headers": [(b"content-type", b"text/plain")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"OK",
+            })
+        except Exception as e:
+            logger.error(f"Failed to process update: {str(e)}")
+            await send({
+                "type": "http.response.start",
+                "status": HTTPStatus.INTERNAL_SERVER_ERROR,
+                "headers": [(b"content-type", b"text/plain")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": str(e).encode("utf-8"),
+            })
+        return
+
+    # Если путь не найден
+    await send({
+        "type": "http.response.start",
+        "status": HTTPStatus.NOT_FOUND,
+        "headers": [(b"content-type", b"text/plain")],
+    })
+    await send({
+        "type": "http.response.body",
+        "body": b"Not Found",
+    })
+
 # Асинхронная функция для установки вебхука
 async def set_webhook():
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
@@ -308,31 +382,13 @@ async def set_webhook():
     else:
         logger.error("Failed to set webhook")
 
-# Маршрут для обработки вебхуков
-@app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    logger.info(f"Received update: {update}")
-    await application.process_update(update)
-    return "OK", 200
-
-# Маршрут для установки вебхука
-@app.route("/setwebhook", methods=["GET"])
-async def set_webhook_route():
-    await set_webhook()
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    return f"Webhook set to {webhook_url}", 200
-
-# Маршрут для проверки состояния (health check)
-@app.route("/", methods=["GET"])
-def health_check():
-    logger.info("Received health check request")
-    return "Bot is running", 200
-
 # Запуск приложения
 if __name__ == "__main__":
-    # Для локального тестирования
+    # Устанавливаем вебхук
+    asyncio.run(set_webhook())
+
+    # Запускаем Uvicorn
     port = int(os.getenv("PORT", 10000))
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
-    app.run(host="0.0.0.0", port=port, debug=True)
+    config = uvicorn.Config(app=webhook_handler, host="0.0.0.0", port=port)
+    server = uvicorn.Server(config)
+    asyncio.run(server.serve())
