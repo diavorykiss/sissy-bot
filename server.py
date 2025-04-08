@@ -256,3 +256,11 @@ def health_check():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+# В конец файла server.py
+if __name__ == "__main__":
+    # Для локального тестирования используем встроенный сервер Flask
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=True)
+else:
+    # Для продакшена (gunicorn) ничего не делаем
+    pass
