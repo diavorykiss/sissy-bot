@@ -1,8 +1,18 @@
+import logging
+import os
+import random
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import random
-import os
+from aiohttp import web
+import asyncio
 
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Настройки бота
 TOKEN = "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg"
 MEDIA_PATH = "media"
 media = {
@@ -109,6 +119,7 @@ async def start(update, context):
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
+    logger.info(f"User {user_id} started the bot")
     await update.message.reply_text(task_text, reply_markup=build_menu())
     await send_media(user_id, context, media_file, "photo")
 
@@ -124,6 +135,7 @@ async def task(update, context):
     else:
         task_text, media_file = random.choice(tasks["advanced"])
     
+    logger.info(f"User {user_id} requested a task (progress: {progress})")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -134,6 +146,7 @@ async def task(update, context):
 async def extreme(update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
+    logger.info(f"User {user_id} requested an extreme task")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -144,6 +157,7 @@ async def extreme(update, context):
 async def earn(update, context):
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
+    logger.info(f"User {user_id} requested an earn task")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -184,6 +198,7 @@ async def hypno(update, context):
         ("Ты моя грязная игрушка! 🎎\nКак выполнить: Смотри и опиши, как я использую тебя! 🔥", "hypno_28.gif")
     ]
     task_text, media_file = random.choice(hypno_tasks)
+    logger.info(f"User {user_id} requested a hypno task")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -203,13 +218,43 @@ async def button(update, context):
     elif query.data == "hypno":
         await hypno(update, context)
 
-application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
+# HTTP-сервер для Render
+async def handle_health_check(request):
+    logger.info("Received health check request")
+    return web.Response(text="Bot is running")
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("task", task))
-application.add_handler(CommandHandler("extreme", extreme))
-application.add_handler(CommandHandler("earn", earn))
-application.add_handler(CommandHandler("hypno", hypno))
-application.add_handler(CallbackQueryHandler(button))
+async def start_http_server():
+    app = web.Application()
+    app.add_routes([web.get('/', handle_health_check)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 10000))  # Render использует переменную PORT, по умолчанию 10000
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f"HTTP server started on port {port}")
 
-application.run_polling()
+# Основная функция для запуска бота и HTTP-сервера
+async def main():
+    # Инициализация бота
+    application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
+
+    # Добавление обработчиков
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("task", task))
+    application.add_handler(CommandHandler("extreme", extreme))
+    application.add_handler(CommandHandler("earn", earn))
+    application.add_handler(CommandHandler("hypno", hypno))
+    application.add_handler(CallbackQueryHandler(button))
+
+    # Запуск HTTP-сервера в отдельной задаче
+    asyncio.create_task(start_http_server())
+
+    # Запуск бота в режиме polling
+    logger.info("Starting bot in polling mode")
+    await application.run_polling()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.error(f"Critical error: {str(e)}")
