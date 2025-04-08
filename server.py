@@ -2,6 +2,8 @@ import os
 import logging
 import asyncio
 import random
+import signal
+import sys
 from flask import Flask, request
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -16,8 +18,9 @@ logger = logging.getLogger(__name__)
 # Инициализация Flask-приложения
 app = Flask(__name__)
 
-# Получение токена из переменных окружения
+# Получение токена и порта из переменных окружения
 TOKEN = os.getenv("TELEGRAM_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
+PORT = int(os.getenv("PORT", 10000))  # Используем PORT из переменной окружения
 MEDIA_PATH = "media"
 
 # Определение медиафайлов
@@ -260,14 +263,6 @@ async def button(update: Update, context):
     elif query.data == "hypno":
         await hypno(update, context)
 
-# Добавление обработчиков
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("task", task))
-application.add_handler(CommandHandler("extreme", extreme))
-application.add_handler(CommandHandler("earn", earn))
-application.add_handler(CommandHandler("hypno", hypno))
-application.add_handler(CallbackQueryHandler(button))
-
 # Асинхронная функция для инициализации приложения и установки вебхука
 async def initialize_application():
     logger.info("Инициализация Telegram Application")
@@ -281,8 +276,29 @@ async def initialize_application():
 # Асинхронная функция для завершения работы приложения
 async def shutdown_application():
     logger.info("Завершение работы Telegram Application")
+    # Останавливаем получение обновлений
     await application.stop()
+    # Завершаем все задачи
     await application.shutdown()
+    # Закрываем все соединения
+    await application.bot.session.close()
+    # Останавливаем цикл событий asyncio
+    loop = asyncio.get_event_loop()
+    tasks = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task()]
+    for task in tasks:
+        task.cancel()
+    loop.stop()
+    loop.run_until_complete(loop.shutdown_asyncgens())
+    loop.close()
+
+# Обработчик сигналов для корректного завершения
+def handle_shutdown(loop):
+    logger.info("Получен сигнал завершения, начинаем корректное завершение работы")
+    loop.create_task(shutdown_application())
+    loop.run_until_complete(loop.shutdown_asyncgens())
+    loop.close()
+    logger.info("Завершение работы завершено")
+    sys.exit(0)
 
 # Маршрут для вебхука
 @app.route(f"/{TOKEN}", methods=["POST"])
@@ -314,6 +330,10 @@ asgi_app = WsgiToAsgi(app)
 loop = asyncio.get_event_loop()
 loop.run_until_complete(initialize_application())
 
+# Регистрация обработчиков сигналов
+signal.signal(signal.SIGTERM, lambda signum, frame: handle_shutdown(loop))
+signal.signal(signal.SIGINT, lambda signum, frame: handle_shutdown(loop))
+
 if __name__ == "__main__":
-    # Для локальной разработки
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    # Запуск сервера на порту из переменной окружения
+    app.run(host="0.0.0.0", port=PORT)
