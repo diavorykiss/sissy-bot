@@ -5,8 +5,6 @@ import requests
 import json
 import time
 import asyncio
-import uvicorn
-from http import HTTPStatus
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from io import BytesIO
@@ -298,97 +296,17 @@ application.add_handler(CommandHandler("earn", earn))
 application.add_handler(CommandHandler("hypno", hypno))
 application.add_handler(CallbackQueryHandler(button))
 
-# Асинхронная функция для обработки вебхуков
-async def webhook_handler(scope, receive, send):
-    if scope["type"] != "http":
-        return
-
-    method = scope["method"]
-    path = scope["path"]
-
-    # Health check endpoint
-    if method in ("GET", "HEAD") and path == "/":
-        await send({
-            "type": "http.response.start",
-            "status": HTTPStatus.OK,
-            "headers": [(b"content-type", b"text/plain")],
-        })
-        await send({
-            "type": "http.response.body",
-            "body": b"Bot is running",
-        })
-        return
-
-    # Webhook endpoint
-    if method == "POST" and path == f"/{TOKEN}":
-        try:
-            # Получаем тело запроса
-            body = b""
-            while True:
-                message = await receive()
-                if message.get("type") == "http.request":
-                    body += message.get("body", b"")
-                    if not message.get("more_body", False):
-                        break
-
-            # Парсим JSON
-            update_data = json.loads(body.decode("utf-8"))
-            update = Update.de_json(update_data, application.bot)
-            logger.info(f"Received update: {update}")
-
-            # Обрабатываем обновление
-            await application.process_update(update)
-
-            # Отправляем ответ
-            await send({
-                "type": "http.response.start",
-                "status": HTTPStatus.OK,
-                "headers": [(b"content-type", b"text/plain")],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": b"OK",
-            })
-        except Exception as e:
-            logger.error(f"Failed to process update: {str(e)}")
-            await send({
-                "type": "http.response.start",
-                "status": HTTPStatus.INTERNAL_SERVER_ERROR,
-                "headers": [(b"content-type", b"text/plain")],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": str(e).encode("utf-8"),
-            })
-        return
-
-    # Если путь не найден
-    await send({
-        "type": "http.response.start",
-        "status": HTTPStatus.NOT_FOUND,
-        "headers": [(b"content-type", b"text/plain")],
-    })
-    await send({
-        "type": "http.response.body",
-        "body": b"Not Found",
-    })
-
-# Асинхронная функция для установки вебхука
-async def set_webhook():
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    success = await application.bot.set_webhook(webhook_url)
-    if success:
-        logger.info(f"Webhook set to {webhook_url}")
-    else:
-        logger.error("Failed to set webhook")
-
 # Запуск приложения
 if __name__ == "__main__":
-    # Устанавливаем вебхук
-    asyncio.run(set_webhook())
+    # Инициализируем приложение
+    application.initialize()
 
-    # Запускаем Uvicorn
+    # Устанавливаем вебхук и запускаем сервер
     port = int(os.getenv("PORT", 10000))
-    config = uvicorn.Config(app=webhook_handler, host="0.0.0.0", port=port)
-    server = uvicorn.Server(config)
-    asyncio.run(server.serve())
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=TOKEN,
+        webhook_url=webhook_url
+    )
