@@ -4,9 +4,6 @@ import logging
 import random
 import fcntl
 import asyncio
-import threading
-import http.server
-import socketserver
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
@@ -297,36 +294,10 @@ def check_single_instance():
         logger.error("Another instance of the bot is already running. Exiting...")
         sys.exit(1)
 
-# Фиктивный HTTP-сервер для Web Service
-def start_dummy_server():
-    PORT = int(os.getenv("PORT", 8080))  # Render предоставляет переменную PORT
-    Handler = http.server.SimpleHTTPRequestHandler
-    max_attempts = 10
-    for attempt in range(max_attempts):
-        try:
-            with socketserver.TCPServer(("", PORT), Handler) as httpd:
-                logger.info(f"Dummy server started on port {PORT}")
-                httpd.serve_forever()
-            break  # Если сервер успешно запустился, выходим из цикла
-        except OSError as e:
-            if e.errno == 98:  # Address already in use
-                logger.warning(f"Port {PORT} is already in use, trying another port...")
-                PORT += 1  # Пробуем следующий порт
-            else:
-                logger.error(f"Failed to start dummy server: {str(e)}")
-                raise
-    else:
-        logger.error(f"Could not start dummy server after {max_attempts} attempts. Exiting...")
-        sys.exit(1)
-
 # Запуск бота
 if __name__ == "__main__":
     lock = check_single_instance()
     try:
-        # Запускаем фиктивный сервер в отдельном потоке
-        dummy_server_thread = threading.Thread(target=start_dummy_server, daemon=True)
-        dummy_server_thread.start()
-
         # Удаляем старый webhook
         logger.info("Удаление старого webhook")
         asyncio.run(application.bot.delete_webhook(drop_pending_updates=True))
