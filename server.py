@@ -233,8 +233,8 @@ async def start_http_server():
     await site.start()
     logger.info(f"HTTP server started on port {port}")
 
-# Основная функция для запуска бота и HTTP-сервера
-async def main():
+# Инициализация и запуск бота
+def main():
     # Инициализация бота
     application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
 
@@ -246,15 +246,16 @@ async def main():
     application.add_handler(CommandHandler("hypno", hypno))
     application.add_handler(CallbackQueryHandler(button))
 
-    # Запуск HTTP-сервера в отдельной задаче
-    asyncio.create_task(start_http_server())
+    # Запуск HTTP-сервера
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start_http_server())
 
     # Запуск бота в режиме polling
     logger.info("Starting bot in polling mode")
-    await application.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except Exception as e:
         logger.error(f"Critical error: {str(e)}")
