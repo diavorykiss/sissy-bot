@@ -296,17 +296,22 @@ application.add_handler(CommandHandler("earn", earn))
 application.add_handler(CommandHandler("hypno", hypno))
 application.add_handler(CallbackQueryHandler(button))
 
-# Запуск приложения
-if __name__ == "__main__":
+# Асинхронная функция для запуска приложения
+async def main():
     # Инициализируем приложение
-    application.initialize()
+    await application.initialize()
 
     # Устанавливаем вебхук и запускаем сервер
     port = int(os.getenv("PORT", 10000))
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    application.run_webhook(
+    await application.start()
+    await application.updater.start_webhook(
         listen="0.0.0.0",
         port=port,
         url_path=TOKEN,
         webhook_url=webhook_url
     )
+
+# Запуск приложения
+if __name__ == "__main__":
+    asyncio.run(main())
