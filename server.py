@@ -1,10 +1,26 @@
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import random
 import os
+import sys
+import logging
+import random
+import fcntl
+import asyncio
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 
-TOKEN = "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg"
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Константы
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is not set. Please set it in the environment variables.")
 MEDIA_PATH = "media"
+
+# Определение медиафайлов
 media = {
     "start": ["start.jpg"],
     "task": ["task.jpg"],
@@ -12,6 +28,8 @@ media = {
     "earn": ["earn.mp4"],
     "hypno": [f"hypno_{i}.gif" for i in range(1, 29)]  # Обновлено до 28 файлов
 }
+
+# Определение заданий
 tasks = {
     "beginner": [
         ("Стань моей гладкой девочкой! 🪒\nКак выполнить: Возьми бритву, нанеси ароматную пену и сбрей все волосы с ног, чтобы они сияли как у настоящей леди. Надень кружевные чулочки, сделай фото своих ножек в позе кокетливой куколки и отправь Госпоже! ✨", "task.jpg"),
@@ -45,24 +63,31 @@ tasks = {
         ("Соси себя как шлюха! 🍆\nКак выполнить: Надень чулки и лифчик, попробуй достать ртом до своего члена, сними видео своих усилий и скажи 'Я твоя грязная сиси, Госпожа!' 🎥", "extreme.jpg"),
         ("Кончи в рот как моя девочка! 💦\nКак выполнить: Накрась губы, кончи себе в рот, проглоти и сними видео с подписью 'Я глотаю для тебя, Госпожа!' 😋", "extreme.jpg"),
         ("Служи мне как рабыня! 👅\nКак выполнить: Надень ошейник и чулки, представь, что я сижу на твоём лице, и напиши длинный рассказ, как ты лижешь мою киску и умоляешь о наказании! 💦", "extreme.jpg"),
-        ("Кончи на лицо как шлюшка! 😈\nКак выполнить: Сделай макияж, кончи себе на лицо, размажь сперму по губам и щекам, сними фото с подписью 'Я твоя грязная кукла, Госпожа!' 📸", "extreme.jpg"),
+        ("Кончи на лицо как шлюшка! 😈\nКак выполнить: Сделай макияж, кончи себе на лицо, разотри сперму по губам и щекам, сними фото с подписью 'Я твоя грязная кукла, Госпожа!' 📸", "extreme.jpg"),
         ("Соси как моя сиси на каблуках! 🍭\nКак выполнить: Надень туфли и бельё, соси дилдо глубоко с чавканьем и сними видео, где говоришь 'Я твоя шлюха, Госпожа!' 🎤", "extreme.jpg"),
-        ("Играй со спермой как девочка! 💧\nКак выполнить: Надень лифчик, собери сперму после оргазма, размажь по губам и груди, сними селфи с подписью 'Я твоя грязная сиси!' 😘", "extreme.jpg"),
+        ("Играй со спермой как девочка! 💧\nКак выполнить: Надень лифчик, собери сперму после оргазма, разотри по губам и груди, сними селфи с подписью 'Я твоя грязная сиси!' 😘", "extreme.jpg"),
         ("Трахай попку как моя кукла! 🍑\nКак выполнить: Надень платье, вставь игрушку в попку, двигай ею и сними видео сзади, крича 'Госпожа, я твоя анальная шлюшка!' 🎥", "extreme.jpg"),
         ("Глотай как моя рабыня! 🍆\nКак выполнить: Накрасься, кончи на дилдо, оближи его и проглоти, сними видео с подписью 'Я твоя послушная девочка, Госпожа!' 😈", "extreme.jpg")
     ],
     "earn": [
         ("Стань шлюшкой за деньги! 💰\nКак выполнить: Надень бельё, чулки, сделай макияж, найди клиента за 5000 рублей. Сними видео, где виляешь попкой, и пришли скрин переписки Госпоже! 📱", "earn.mp4"),
-        ("Докажи, что ты моя проститутка! 💵\nКак выполнить: Надень каблуки и платье, делай минет (лижи головку, бери глубоко, стони как девочка), подставляй попку, размажь сперму по лицу. Сними отчёт с деньгами! 🎥", "earn.mp4"),
-        ("Заработай ротиком как сиси! 🍆\nКак выполнить: Накрась губы, соси медленно, играй язычком, кончи ему на лицо и размажь. Сними фото с деньгами и расскажи, как ты была шлюшкой! 📸", "earn.mp4"),
+        ("Докажи, что ты моя проститутка! 💵\nКак выполнить: Надень каблуки и платье, делай минет (лижи головку, бери глубоко, стони как девочка), подставляй попку, разотри сперму по лицу. Сними отчёт с деньгами! 🎥", "earn.mp4"),
+        ("Заработай ротиком как сиси! 🍆\nКак выполнить: Накрась губы, соси медленно, играй язычком, кончи ему на лицо и разотри. Сними фото с деньгами и расскажи, как ты была шлюшкой! 📸", "earn.mp4"),
         ("Покажи, как служишь за бабки! 💸\nКак выполнить: Надень чулки, после встречи (минет и секс) сними видео с деньгами, расскажи, как сосала, подставляла попку и играла со спермой как кукла! 🎤", "earn.mp4"),
         ("Обслужи двоих как моя девочка! 👬\nКак выполнить: Надень бельё и каблуки, соси одному, пока второй трахает твою попку. Сними видео и покажи деньги с подписью 'Я твоя шлюха, Госпожа!' 💰", "earn.mp4")
     ]
 }
+
+# Хранилище прогресса пользователей и кэш медиафайлов
 user_progress = {}
 media_cache = {}
 
+# Инициализация Telegram Application
+application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
+
+# Функция для создания меню
 def build_menu():
+    logger.info("Создание меню с кнопками")
     keyboard = [
         [InlineKeyboardButton("Получить задание 📝", callback_data="task")],
         [InlineKeyboardButton("Экстремальное задание 🔥", callback_data="extreme")],
@@ -71,7 +96,9 @@ def build_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# Функция для отправки медиафайлов
 async def send_media(user_id, context, media_file, media_type="photo"):
+    logger.info(f"Отправка медиафайла: {media_file} (тип: {media_type}) пользователю {user_id}")
     file_path = os.path.join(MEDIA_PATH, media_file)
     file_key = f"{media_file}_{media_type}"
     
@@ -88,32 +115,58 @@ async def send_media(user_id, context, media_file, media_type="photo"):
                     msg = await context.bot.send_animation(user_id, file)
                     file_id = msg.animation.file_id
                 media_cache[file_key] = file_id
+                logger.info(f"Медиафайл {media_file} отправлен, file_id: {file_id}")
         except FileNotFoundError:
+            logger.error(f"Файл {file_path} не найден!")
             await context.bot.send_message(user_id, "Ошибка: Медиафайл не найден! 🚫")
             return
         except Exception as e:
+            logger.error(f"Ошибка при отправке медиафайла {media_file}: {str(e)}")
             await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
             return
     else:
         file_id = media_cache[file_key]
-        if media_type == "photo":
-            await context.bot.send_photo(user_id, file_id)
-        elif media_type == "video":
-            await context.bot.send_video(user_id, file_id)
-        elif media_type == "animation":
-            await context.bot.send_animation(user_id, file_id)
+        try:
+            if media_type == "photo":
+                await context.bot.send_photo(user_id, file_id)
+            elif media_type == "video":
+                await context.bot.send_video(user_id, file_id)
+            elif media_type == "animation":
+                await context.bot.send_animation(user_id, file_id)
+            logger.info(f"Медиафайл {media_file} отправлен из кэша, file_id: {file_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке медиафайла из кэша {media_file}: {str(e)}")
+            await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
 
-async def start(update, context):
+# Команда /start
+async def start(update: Update, context):
+    logger.info("Обработчик команды /start вызван")
     user_id = update.message.chat_id
+    logger.info(f"Получена команда /start от пользователя {user_id}")
+    
+    logger.info(f"Инициализация прогресса для пользователя {user_id}")
     user_progress[user_id] = 0
+    
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
-    await update.message.reply_text(task_text, reply_markup=build_menu())
+    logger.info(f"Отправка текстового сообщения пользователю {user_id}: {task_text}")
+    
+    try:
+        await update.message.reply_text(task_text, reply_markup=build_menu())
+        logger.info(f"Текстовое сообщение успешно отправлено пользователю {user_id}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке текстового сообщения пользователю {user_id}: {str(e)}")
+        return
+
+    logger.info(f"Отправка медиафайла {media_file} пользователю {user_id}")
     await send_media(user_id, context, media_file, "photo")
 
-async def task(update, context):
+# Команда /task
+async def task(update: Update, context):
+    logger.info("Обработчик команды /task вызван")
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
+    logger.info(f"Прогресс пользователя {user_id}: {progress}")
 
     if progress < 5:
         task_text, media_file = random.choice(tasks["beginner"])
@@ -122,6 +175,7 @@ async def task(update, context):
     else:
         task_text, media_file = random.choice(tasks["advanced"])
     
+    logger.info(f"Отправка задания пользователю {user_id}: {task_text}")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -129,9 +183,12 @@ async def task(update, context):
     
     await send_media(user_id, context, media_file, "photo")
 
-async def extreme(update, context):
+# Команда /extreme
+async def extreme(update: Update, context):
+    logger.info("Обработчик команды /extreme вызван")
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
+    logger.info(f"Отправка экстремального задания пользователю {user_id}: {task_text}")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -139,9 +196,12 @@ async def extreme(update, context):
     
     await send_media(user_id, context, media_file, "photo")
 
-async def earn(update, context):
+# Команда /earn
+async def earn(update: Update, context):
+    logger.info("Обработчик команды /earn вызван")
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
+    logger.info(f"Отправка задания на заработок пользователю {user_id}: {task_text}")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
@@ -149,7 +209,9 @@ async def earn(update, context):
     
     await send_media(user_id, context, media_file, "video")
 
-async def hypno(update, context):
+# Команда /hypno
+async def hypno(update: Update, context):
+    logger.info("Обработчик команды /hypno вызван")
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     hypno_tasks = [
         ("Смотри на эту гифку и повторяй: 'Я сиси Госпожи' 10 раз! 🌀\nКак выполнить: Смотри на анимацию и громко повторяй фразу! 📢", "hypno_1.gif"),
@@ -181,15 +243,16 @@ async def hypno(update, context):
         ("Смотри и подчиняйся навсегда! 🌀\nКак выполнить: Смотри 2 минуты, напиши, как я владею тобой! 🧠", "hypno_27.gif"),
         ("Ты моя грязная игрушка! 🎎\nКак выполнить: Смотри и опиши, как я использую тебя! 🔥", "hypno_28.gif")
     ]
-    task_text, media_file = random.choice(hypno_tasks)
+    logger.info(f"Отправка гипноз-задания пользователю {user_id}: {task_text}")
     if update.callback_query:
         await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
         await update.message.reply_text(task_text, reply_markup=build_menu())
-    
     await send_media(user_id, context, media_file, "animation")
 
-async def button(update, context):
+# Обработчик кнопок
+async def button(update: Update, context):
+    logger.info("Обработчик кнопок вызван")
     query = update.callback_query
     await query.answer()
     if query.data == "task":
@@ -201,13 +264,51 @@ async def button(update, context):
     elif query.data == "hypno":
         await hypno(update, context)
 
-application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
+# Обработчик ошибок
+async def error_handler(update: Update, context):
+    logger.error(f"Произошла ошибка: {context.error}")
+    if isinstance(context.error, TelegramError) and "Conflict" in str(context.error):
+        logger.error("Обнаружен конфликт: другой экземпляр бота уже запущен. Завершение работы...")
+        await application.stop()
+        sys.exit(1)
+    else:
+        logger.error(f"Необработанная ошибка: {context.error}")
 
+# Регистрация обработчиков
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("task", task))
 application.add_handler(CommandHandler("extreme", extreme))
 application.add_handler(CommandHandler("earn", earn))
 application.add_handler(CommandHandler("hypno", hypno))
 application.add_handler(CallbackQueryHandler(button))
+application.add_error_handler(error_handler)
 
-application.run_polling()
+# Проверка на существующий экземпляр
+LOCK_FILE = "bot.lock"
+
+def check_single_instance():
+    lock_file = open(LOCK_FILE, 'w')
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file
+    except IOError:
+        logger.error("Another instance of the bot is already running. Exiting...")
+        sys.exit(1)
+
+# Запуск бота
+if __name__ == "__main__":
+    lock = check_single_instance()
+    try:
+        # Удаляем старый webhook
+        logger.info("Удаление старого webhook")
+        asyncio.run(application.bot.delete_webhook(drop_pending_updates=True))
+        logger.info("Запуск бота в режиме polling")
+        application.run_polling(drop_pending_updates=True)
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при запуске бота: {str(e)}")
+    finally:
+        logger.info("Завершение работы бота")
+        lock.close()
+        os.remove(LOCK_FILE)
