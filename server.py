@@ -16,7 +16,8 @@ app = Flask(__name__)
 # Инициализация бота
 TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
 bot = Bot(token=TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0)
+# Устанавливаем workers=4 для обработки асинхронных функций
+dispatcher = Dispatcher(bot, None, workers=4)
 
 # Настройки медиа (используем file_id вместо локальных файлов)
 media = {
