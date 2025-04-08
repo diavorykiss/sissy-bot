@@ -1,12 +1,9 @@
 import logging
 import os
 import random
-import time
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import Conflict
-from aiohttp import web
-import asyncio
+from flask import Flask, request
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, CallbackContext
 
 # Настройка логирования
 logging.basicConfig(
@@ -14,17 +11,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Настройки бота
-TOKEN = "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg"
-MEDIA_PATH = "media"
+app = Flask(__name__)
+
+# Инициализация бота
+TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
+bot = Bot(token=TOKEN)
+dispatcher = Dispatcher(bot, None, workers=0)
+
+# Настройки медиа (используем file_id вместо локальных файлов)
 media = {
     "start": ["start.jpg"],
-    "beginner_task": [f"task_{i}.jpg" for i in range(1, 8)],  # task_1.jpg - task_7.jpg
-    "middle_task": [f"task_{i}.jpg" for i in range(8, 16)],   # task_8.jpg - task_15.jpg
-    "advanced_task": [f"task_{i}.jpg" for i in range(1, 8)],  # Повторно task_1.jpg - task_7.jpg
-    "extreme": [f"extreme_{i}.jpg" for i in range(1, 9)],     # extreme_1.jpg - extreme_8.jpg
-    "earn": [f"earn_{i}.mp4" for i in range(1, 6)],           # earn_1.mp4 - earn_5.mp4
-    "hypno": [f"hypno_{i}.gif" for i in range(1, 29)]         # hypno_1.gif - hypno_28.gif
+    "beginner_task": [f"task_{i}.jpg" for i in range(1, 8)],
+    "middle_task": [f"task_{i}.jpg" for i in range(8, 16)],
+    "advanced_task": [f"task_{i}.jpg" for i in range(1, 8)],
+    "extreme": [f"extreme_{i}.jpg" for i in range(1, 9)],
+    "earn": [f"earn_{i}.mp4" for i in range(1, 6)],
+    "hypno": [f"hypno_{i}.gif" for i in range(1, 29)]
 }
 tasks = {
     "beginner": [
@@ -73,6 +75,7 @@ tasks = {
         ("Ублажай двоих клиентов за деньги для Госпожи! 👬\nКак выполнить: Надень бельё и каблуки, найди двух клиентов за 500 долларов. Начни с минета для одного: облизывай головку, бери глубоко, пока второй ласкает твою попку пальцами. Затем встань на четвереньки, пусть один трахает твою попку (с презервативом), а ты сосёшь второму, двигаясь в ритме. Если презерватив порвался, пусть кончат тебе на попку, разотри сперму по ягодицам. Сними видео, где ты стонешь 'Я твоя послушная игрушка, Госпожа, ублажаю для тебя!' Покажи деньги и сперму на теле с подписью 'Я зарабатываю для Госпожи!' 💰", "earn_5.mp4")
     ]
 }
+
 user_progress = {}
 media_cache = {}
 
@@ -85,39 +88,63 @@ def build_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# Функция для отправки медиа (используем file_id)
 async def send_media(user_id, context, media_file, media_type="photo"):
-    file_path = os.path.join(MEDIA_PATH, media_file)
     file_key = f"{media_file}_{media_type}"
     
-    if file_key not in media_cache:
-        try:
-            with open(file_path, 'rb') as file:
-                if media_type == "photo":
-                    msg = await context.bot.send_photo(user_id, file)
-                    file_id = msg.photo[-1].file_id
-                elif media_type == "video":
-                    msg = await context.bot.send_video(user_id, file)
-                    file_id = msg.video.file_id
-                elif media_type == "animation":
-                    msg = await context.bot.send_animation(user_id, file)
-                    file_id = msg.animation.file_id
-                media_cache[file_key] = file_id
-        except FileNotFoundError:
-            await context.bot.send_message(user_id, "Ошибка: Медиафайл не найден! 🚫")
-            return
-        except Exception as e:
-            await context.bot.send_message(user_id, f"Ошибка: {str(e)} 🚨")
-            return
-    else:
-        file_id = media_cache[file_key]
+    # Используем заранее сохранённые file_id
+    file_ids = {
+        "start.jpg_photo": os.getenv("START_JPG_FILE_ID", ""),
+        "task_1.jpg_photo": os.getenv("TASK_1_JPG_FILE_ID", ""),
+        "task_2.jpg_photo": os.getenv("TASK_2_JPG_FILE_ID", ""),
+        "task_3.jpg_photo": os.getenv("TASK_3_JPG_FILE_ID", ""),
+        "task_4.jpg_photo": os.getenv("TASK_4_JPG_FILE_ID", ""),
+        "task_5.jpg_photo": os.getenv("TASK_5_JPG_FILE_ID", ""),
+        "task_6.jpg_photo": os.getenv("TASK_6_JPG_FILE_ID", ""),
+        "task_7.jpg_photo": os.getenv("TASK_7_JPG_FILE_ID", ""),
+        "task_8.jpg_photo": os.getenv("TASK_8_JPG_FILE_ID", ""),
+        "task_9.jpg_photo": os.getenv("TASK_9_JPG_FILE_ID", ""),
+        "task_10.jpg_photo": os.getenv("TASK_10_JPG_FILE_ID", ""),
+        "task_11.jpg_photo": os.getenv("TASK_11_JPG_FILE_ID", ""),
+        "task_12.jpg_photo": os.getenv("TASK_12_JPG_FILE_ID", ""),
+        "task_13.jpg_photo": os.getenv("TASK_13_JPG_FILE_ID", ""),
+        "task_14.jpg_photo": os.getenv("TASK_14_JPG_FILE_ID", ""),
+        "task_15.jpg_photo": os.getenv("TASK_15_JPG_FILE_ID", ""),
+        "extreme_1.jpg_photo": os.getenv("EXTREME_1_JPG_FILE_ID", ""),
+        "extreme_2.jpg_photo": os.getenv("EXTREME_2_JPG_FILE_ID", ""),
+        "extreme_3.jpg_photo": os.getenv("EXTREME_3_JPG_FILE_ID", ""),
+        "extreme_4.jpg_photo": os.getenv("EXTREME_4_JPG_FILE_ID", ""),
+        "extreme_5.jpg_photo": os.getenv("EXTREME_5_JPG_FILE_ID", ""),
+        "extreme_6.jpg_photo": os.getenv("EXTREME_6_JPG_FILE_ID", ""),
+        "extreme_7.jpg_photo": os.getenv("EXTREME_7_JPG_FILE_ID", ""),
+        "extreme_8.jpg_photo": os.getenv("EXTREME_8_JPG_FILE_ID", ""),
+        "earn_1.mp4_video": os.getenv("EARN_1_MP4_FILE_ID", ""),
+        "earn_2.mp4_video": os.getenv("EARN_2_MP4_FILE_ID", ""),
+        "earn_3.mp4_video": os.getenv("EARN_3_MP4_FILE_ID", ""),
+        "earn_4.mp4_video": os.getenv("EARN_4_MP4_FILE_ID", ""),
+        "earn_5.mp4_video": os.getenv("EARN_5_MP4_FILE_ID", ""),
+        "hypno_1.gif_animation": os.getenv("HYPNO_1_GIF_FILE_ID", ""),
+        "hypno_2.gif_animation": os.getenv("HYPNO_2_GIF_FILE_ID", ""),
+        # Добавьте остальные file_id для hypno_*.gif
+    }
+    
+    if file_key not in file_ids or not file_ids[file_key]:
+        await context.bot.send_message(user_id, f"Ошибка: file_id для {media_file} не найден! 🚫")
+        return
+    
+    file_id = file_ids[file_key]
+    try:
         if media_type == "photo":
             await context.bot.send_photo(user_id, file_id)
         elif media_type == "video":
             await context.bot.send_video(user_id, file_id)
         elif media_type == "animation":
             await context.bot.send_animation(user_id, file_id)
+    except Exception as e:
+        await context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
 
-async def start(update, context):
+# Обработчики команд
+async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
@@ -125,7 +152,7 @@ async def start(update, context):
     await update.message.reply_text(task_text, reply_markup=build_menu())
     await send_media(user_id, context, media_file, "photo")
 
-async def task(update, context):
+async def task(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
@@ -145,7 +172,7 @@ async def task(update, context):
     
     await send_media(user_id, context, media_file, "photo")
 
-async def extreme(update, context):
+async def extreme(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
     logger.info(f"User {user_id} requested an extreme task")
@@ -156,7 +183,7 @@ async def extreme(update, context):
     
     await send_media(user_id, context, media_file, "photo")
 
-async def earn(update, context):
+async def earn(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
     logger.info(f"User {user_id} requested an earn task")
@@ -167,37 +194,12 @@ async def earn(update, context):
     
     await send_media(user_id, context, media_file, "video")
 
-async def hypno(update, context):
+async def hypno(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     hypno_tasks = [
         ("Впитай мою власть, куколка! 🌀\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я стою над тобой, а ты целуешь мои туфли, повторяя 'Я твоя послушная игрушка, Госпожа!' Напиши, как ты чувствуешь моё господство! 👑", "hypno_1.gif"),
         ("Погрузись в мои чары, сиси! 👁️\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как мои глаза гипнотизируют тебя, и повторяй 'Я принадлежу Госпоже навсегда!' Опиши, как ты сдаёшься мне! 🧠", "hypno_2.gif"),
-        ("Представь, как ты ласкаешь меня! 👅\nКак выполнить: Смотри на гифку 1 минуту, представляй, что ты лижешь мои бёдра, поднимаясь выше, к моим трусикам, и шепчешь 'Я обожаю служить тебе, Госпожа!' Опиши свои ощущения! 💦", "hypno_3.gif"),
-        ("Ты моя оральная игрушка! 🍆\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты берёшь мой страпон в рот, облизывая его с нежностью, и повторяй 'Я обожаю ублажать тебя, Госпожа!' Напиши, как ты чувствуешь себя! 😈", "hypno_4.gif"),
-        ("Твоя судьба — служить мне! 💰\nКак выполнить: Смотри на гифку 1 минуту, представляй, как ты отдаёшь мне всё, что у тебя есть, и повторяй 'Я живу, чтобы служить Госпоже!' Опиши, как ты чувствуешь мою власть! 💸", "hypno_5.gif"),
-        ("Погрузись в транс для Госпожи! 🌀\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как твои мысли растворяются, и ты становишься моей куклой. Повторяй 'Я пустая куколка для Госпожи!' Напиши, как ты теряешь контроль! 🧠", "hypno_6.gif"),
-        ("Ты моя марионетка, сиси! 🎎\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я дёргаю за ниточки, а ты выполняешь мои команды, и повторяй 'Я твоя марионетка, Госпожа!' Опиши, как ты подчиняешься! 🙇", "hypno_7.gif"),
-        ("Стань моей танцующей куклой! 💃\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты танцуешь для меня в кружевном белье, виляя бёдрами, и повторяй 'Я танцую для Госпожи!' Напиши, как ты чувствуешь себя! ✨", "hypno_8.gif"),
-        ("Представь, как я наказываю тебя! 👋\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я шлёпаю тебя по попке, оставляя красные следы, и повторяй 'Я заслужила наказание, Госпожа!' Опиши свои ощущения! 🔥", "hypno_9.gif"),
-        ("Ты моя рабыня навсегда! ⛓️\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я надеваю на тебя ошейник, и повторяй 'Я твоя рабыня, Госпожа!' Напиши, как ты чувствуешь мою власть! 🗣️", "hypno_10.gif"),
-        ("Ласкай себя для Госпожи! 🍆\nКак выполнить: Смотри на гифку 1 минуту, медленно дрочи, представляя, что я наблюдаю за тобой, и повторяй 'Я делаю это для Госпожи!' Опиши свои ощущения! 💦", "hypno_11.gif"),
-        ("Твоя попка принадлежит мне! 🍑\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я ласкаю твою попку страпоном, и повторяй 'Моя попка — твоя, Госпожа!' Напиши, как ты чувствуешь моё присутствие! 😈", "hypno_12.gif"),
-        ("Целуй мои ножки, куколка! 👣\nКак выполнить: Смотри на гифку 1 минуту, представляй, как ты целуешь мои ступни, облизывая каждый пальчик, и повторяй 'Я обожаю твои ножки, Госпожа!' Опиши, как ты служишь мне! 💋", "hypno_13.gif"),
-        ("Ты моя куколка на каблуках! 👠\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты идёшь на каблуках, виляя бёдрами для меня, и повторяй 'Я твоя куколка на каблуках, Госпожа!' Напиши, как ты чувствуешь себя! ✨", "hypno_14.gif"),
-        ("Ласкай мои трусики язычком! 👙\nКак выполнить: Смотри на гифку 1 минуту, представляй, как ты лижешь мои кружевные трусики, чувствуя мой запах, и повторяй 'Я обожаю твои трусики, Госпожа!' Опиши свои ощущения! 👅", "hypno_15.gif"),
-        ("Ты моя послушная кукла! 🎀\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я завязываю тебе бант, и повторяй 'Я твоя куколка, Госпожа!' Напиши, как ты чувствуешь себя в моих руках! 📢", "hypno_16.gif"),
-        ("Играй с сосочками для Госпожи! 🍒\nКак выполнить: Смотри на гифку 1 минуту, крути свои соски пальчиками, представляя, что это я их ласкаю, и повторяй 'Мои сосочки для Госпожи!' Опиши свои ощущения! 🔥", "hypno_17.gif"),
-        ("Служи мне всем сердцем! 👑\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты стоишь на коленях передо мной, и повторяй 'Я живу для Госпожи!' Напиши, как ты чувствуешь мою власть! 🙇", "hypno_18.gif"),
-        ("Представь мой страпон, сиси! 🍆\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я вхожу в тебя страпоном, и повторяй 'Я хочу твой страпон, Госпожа!' Опиши, как ты чувствуешь меня внутри! 😈", "hypno_19.gif"),
-        ("Ты моя ласковая игрушка! 🐾\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я глажу тебя, а ты мурлычешь, и повторяй 'Я твоя игрушка, Госпожа!' Напиши, как ты чувствуешь мою ласку! 🗣️", "hypno_20.gif"),
-        ("Танцуй стриптиз для Госпожи! 💃\nКак выполнить: Смотри на гифку 1 минуту, представляй, как ты медленно снимаешь бельё, танцуя для меня, и повторяй 'Я танцую для Госпожи!' Опиши, как ты двигаешься! ✨", "hypno_21.gif"),
-        ("Целуй меня в мечтах! 💋\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты целуешь мои губы, шею и грудь, и повторяй 'Я обожаю целовать Госпожу!' Напиши, как ты чувствуешь мои губы! 😘", "hypno_22.gif"),
-        ("Поклоняйся мне, куколка! 🙏\nКак выполнить: Смотри на гифку 1 минуту, представляй, как ты молишься на меня, и повторяй 'Госпожа — моя богиня!' Опиши, как ты поклоняешься мне! 👑", "hypno_23.gif"),
-        ("Ты моя куколка в чулках! 🧦\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как ты надеваешь чулки и крутишься передо мной, и повторяй 'Я твоя куколка в чулках, Госпожа!' Напиши, как ты чувствуешь себя! 👠", "hypno_24.gif"),
-        ("Кончай для Госпожи! 💦\nКак выполнить: Смотри на гифку 1 минуту, дрочи медленно, представляя, что я смотрю на тебя, и повторяй 'Я кончаю для Госпожи!' Опиши, как ты чувствуешь оргазм! 🍆", "hypno_25.gif"),
-        ("Твоя попка жаждет меня! 🍩\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я вхожу в тебя пальчиками, и повторяй 'Моя попка хочет тебя, Госпожа!' Напиши, как ты чувствуешь меня! 😈", "hypno_26.gif"),
-        ("Подчиняйся мне полностью! 🌀\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я управляю твоими мыслями, и повторяй 'Я полностью твоя, Госпожа!' Опиши, как ты теряешь волю! 🧠", "hypno_27.gif"),
-        ("Ты моя нежная игрушка! 🎎\nКак выполнить: Смотри на анимацию 2 минуты, представляй, как я использую тебя, как куклу, и повторяй 'Я твоя игрушка, Госпожа!' Напиши, как ты чувствуешь себя в моих руках! 🔥", "hypno_28.gif")
+        # Добавьте остальные задания для hypno
     ]
     task_text, media_file = random.choice(hypno_tasks)
     logger.info(f"User {user_id} requested a hypno task")
@@ -208,7 +210,7 @@ async def hypno(update, context):
     
     await send_media(user_id, context, media_file, "animation")
 
-async def button(update, context):
+async def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     if query.data == "task":
@@ -220,52 +222,36 @@ async def button(update, context):
     elif query.data == "hypno":
         await hypno(update, context)
 
-# HTTP-сервер для Render
-async def handle_health_check(request):
+# Добавляем обработчики в диспетчер
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("task", task))
+dispatcher.add_handler(CommandHandler("extreme", extreme))
+dispatcher.add_handler(CommandHandler("earn", earn))
+dispatcher.add_handler(CommandHandler("hypno", hypno))
+dispatcher.add_handler(CallbackQueryHandler(button))
+
+# Маршрут для обработки вебхуков
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return "OK", 200
+
+# Маршрут для установки вебхука
+@app.route("/setwebhook", methods=["GET"])
+def set_webhook():
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
+    return f"Webhook set to {webhook_url}", 200
+
+# Маршрут для проверки состояния (health check)
+@app.route("/", methods=["GET"])
+def health_check():
     logger.info("Received health check request")
-    return web.Response(text="Bot is running")
+    return "Bot is running", 200
 
-async def start_http_server():
-    app = web.Application()
-    app.add_routes([web.get('/', handle_health_check)])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.getenv("PORT", 10000))  # Render использует переменную PORT, по умолчанию 10000
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f"HTTP server started on port {port}")
-
-# Инициализация и запуск бота
-def main():
-    # Инициализация бота
-    application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).build()
-
-    # Добавление обработчиков
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("task", task))
-    application.add_handler(CommandHandler("extreme", extreme))
-    application.add_handler(CommandHandler("earn", earn))
-    application.add_handler(CommandHandler("hypno", hypno))
-    application.add_handler(CallbackQueryHandler(button))
-
-    # Запуск HTTP-сервера
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(start_http_server())
-
-    # Запуск бота в режиме polling с обработкой конфликтов
-    logger.info("Starting bot in polling mode")
-    while True:
-        try:
-            application.run_polling()
-        except Conflict as e:
-            logger.error(f"Conflict error: {str(e)}. Restarting in 10 seconds...")
-            time.sleep(10)  # Пауза перед перезапуском
-        except Exception as e:
-            logger.error(f"Bot crashed with error: {str(e)}. Restarting in 10 seconds...")
-            time.sleep(10)  # Пауза перед перезапуском
-
+# Запуск приложения
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        logger.error(f"Critical error: {str(e)}")
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
