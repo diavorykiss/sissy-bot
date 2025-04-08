@@ -4,6 +4,7 @@ import random
 import requests
 import json
 import time
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -298,25 +299,29 @@ application.add_handler(CommandHandler("earn", earn))
 application.add_handler(CommandHandler("hypno", hypno))
 application.add_handler(CallbackQueryHandler(button))
 
+# Асинхронная функция для установки вебхука
+async def set_webhook():
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    success = await application.bot.set_webhook(webhook_url)
+    if success:
+        logger.info(f"Webhook set to {webhook_url}")
+    else:
+        logger.error("Failed to set webhook")
+
 # Маршрут для обработки вебхуков
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     logger.info(f"Received update: {update}")
-    application.process_update(update)
+    await application.process_update(update)
     return "OK", 200
 
 # Маршрут для установки вебхука
 @app.route("/setwebhook", methods=["GET"])
-def set_webhook():
+async def set_webhook_route():
+    await set_webhook()
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    success = application.bot.set_webhook(webhook_url)
-    if success:
-        logger.info(f"Webhook set to {webhook_url}")
-        return f"Webhook set to {webhook_url}", 200
-    else:
-        logger.error("Failed to set webhook")
-        return "Failed to set webhook", 500
+    return f"Webhook set to {webhook_url}", 200
 
 # Маршрут для проверки состояния (health check)
 @app.route("/", methods=["GET"])
@@ -324,16 +329,10 @@ def health_check():
     logger.info("Received health check request")
     return "Bot is running", 200
 
-# Автоматическая установка вебхука при запуске
+# Запуск приложения
 if __name__ == "__main__":
     # Для локального тестирования
     port = int(os.getenv("PORT", 10000))
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'localhost')}/{TOKEN}"
-    application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
     app.run(host="0.0.0.0", port=port, debug=True)
-else:
-    # Для продакшена (gunicorn)
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
