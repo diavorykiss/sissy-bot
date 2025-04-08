@@ -272,7 +272,6 @@ async def error_handler(update: Update, context):
     if isinstance(context.error, TelegramError) and "Conflict" in str(context.error):
         logger.error("Обнаружен конфликт: другой экземпляр бота уже запущен. Завершение работы...")
         await application.stop()
-        await application.updater.stop()
         sys.exit(1)
     else:
         logger.error(f"Необработанная ошибка: {context.error}")
@@ -300,11 +299,25 @@ def check_single_instance():
 
 # Фиктивный HTTP-сервер для Web Service
 def start_dummy_server():
-    PORT = int(os.getenv("PORT", 10000))  # Render предоставляет переменную PORT
+    PORT = int(os.getenv("PORT", 8080))  # Render предоставляет переменную PORT
     Handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        logger.info(f"Dummy server started on port {PORT}")
-        httpd.serve_forever()
+    max_attempts = 10
+    for attempt in range(max_attempts):
+        try:
+            with socketserver.TCPServer(("", PORT), Handler) as httpd:
+                logger.info(f"Dummy server started on port {PORT}")
+                httpd.serve_forever()
+            break  # Если сервер успешно запустился, выходим из цикла
+        except OSError as e:
+            if e.errno == 98:  # Address already in use
+                logger.warning(f"Port {PORT} is already in use, trying another port...")
+                PORT += 1  # Пробуем следующий порт
+            else:
+                logger.error(f"Failed to start dummy server: {str(e)}")
+                raise
+    else:
+        logger.error(f"Could not start dummy server after {max_attempts} attempts. Exiting...")
+        sys.exit(1)
 
 # Запуск бота
 if __name__ == "__main__":
@@ -316,9 +329,9 @@ if __name__ == "__main__":
 
         # Удаляем старый webhook
         logger.info("Удаление старого webhook")
-        asyncio.run(application.bot.delete_webhook())
+        asyncio.run(application.bot.delete_webhook(drop_pending_updates=True))
         logger.info("Запуск бота в режиме polling")
-        asyncio.run(application.run_polling())
+        asyncio.run(application.run_polling(drop_pending_updates=True))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
     except Exception as e:
