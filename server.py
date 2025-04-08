@@ -16,8 +16,8 @@ app = Flask(__name__)
 # Инициализация бота
 TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
 bot = Bot(token=TOKEN)
-# Устанавливаем workers=4 для обработки асинхронных функций
-dispatcher = Dispatcher(bot, None, workers=4)
+# Устанавливаем workers=0, так как используем синхронные функции
+dispatcher = Dispatcher(bot, None, workers=0)
 
 # Настройки медиа (используем file_id вместо локальных файлов)
 media = {
@@ -89,8 +89,8 @@ def build_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# Функция для отправки медиа (используем file_id)
-async def send_media(user_id, context, media_file, media_type="photo"):
+# Функция для отправки медиа (синхронная версия)
+def send_media(user_id, context, media_file, media_type="photo"):
     file_key = f"{media_file}_{media_type}"
     
     # Используем заранее сохранённые file_id
@@ -130,30 +130,30 @@ async def send_media(user_id, context, media_file, media_type="photo"):
     }
     
     if file_key not in file_ids or not file_ids[file_key]:
-        await context.bot.send_message(user_id, f"Ошибка: file_id для {media_file} не найден! 🚫")
+        context.bot.send_message(user_id, f"Ошибка: file_id для {media_file} не найден! 🚫")
         return
     
     file_id = file_ids[file_key]
     try:
         if media_type == "photo":
-            await context.bot.send_photo(user_id, file_id)
+            context.bot.send_photo(user_id, file_id)
         elif media_type == "video":
-            await context.bot.send_video(user_id, file_id)
+            context.bot.send_video(user_id, file_id)
         elif media_type == "animation":
-            await context.bot.send_animation(user_id, file_id)
+            context.bot.send_animation(user_id, file_id)
     except Exception as e:
-        await context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
+        context.bot.send_message(user_id, f"Ошибка при отправке медиа: {str(e)} 🚨")
 
-# Обработчики команд
-async def start(update: Update, context: CallbackContext) -> None:
+# Обработчики команд (синхронные)
+def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.chat_id
     user_progress[user_id] = 0
     task_text, media_file = ("На колени, сиси! 🙇 Я твоя Госпожа, ты моя кукла! Смотри на меня и подчиняйся! 👑", "start.jpg")
     logger.info(f"User {user_id} started the bot")
-    await update.message.reply_text(task_text, reply_markup=build_menu())
-    await send_media(user_id, context, media_file, "photo")
+    update.message.reply_text(task_text, reply_markup=build_menu())
+    send_media(user_id, context, media_file, "photo")
 
-async def task(update: Update, context: CallbackContext) -> None:
+def task(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     user_progress[user_id] = user_progress.get(user_id, 0) + 1
     progress = user_progress[user_id]
@@ -167,35 +167,35 @@ async def task(update: Update, context: CallbackContext) -> None:
     
     logger.info(f"User {user_id} requested a task (progress: {progress})")
     if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
+        update.message.reply_text(task_text, reply_markup=build_menu())
     
-    await send_media(user_id, context, media_file, "photo")
+    send_media(user_id, context, media_file, "photo")
 
-async def extreme(update: Update, context: CallbackContext) -> None:
+def extreme(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["extreme"])
     logger.info(f"User {user_id} requested an extreme task")
     if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
+        update.message.reply_text(task_text, reply_markup=build_menu())
     
-    await send_media(user_id, context, media_file, "photo")
+    send_media(user_id, context, media_file, "photo")
 
-async def earn(update: Update, context: CallbackContext) -> None:
+def earn(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     task_text, media_file = random.choice(tasks["earn"])
     logger.info(f"User {user_id} requested an earn task")
     if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
+        update.message.reply_text(task_text, reply_markup=build_menu())
     
-    await send_media(user_id, context, media_file, "video")
+    send_media(user_id, context, media_file, "video")
 
-async def hypno(update: Update, context: CallbackContext) -> None:
+def hypno(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.message.chat_id if update.callback_query else update.message.chat_id
     hypno_tasks = [
         ("Впитай мою власть, куколка! 🌀\nКак выполнить: Смотри на гифку 1 минуту, представляй, как я стою над тобой, а ты целуешь мои туфли, повторяя 'Я твоя послушная игрушка, Госпожа!' Напиши, как ты чувствуешь моё господство! 👑", "hypno_1.gif"),
@@ -205,23 +205,23 @@ async def hypno(update: Update, context: CallbackContext) -> None:
     task_text, media_file = random.choice(hypno_tasks)
     logger.info(f"User {user_id} requested a hypno task")
     if update.callback_query:
-        await update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
+        update.callback_query.message.reply_text(task_text, reply_markup=build_menu())
     else:
-        await update.message.reply_text(task_text, reply_markup=build_menu())
+        update.message.reply_text(task_text, reply_markup=build_menu())
     
-    await send_media(user_id, context, media_file, "animation")
+    send_media(user_id, context, media_file, "animation")
 
-async def button(update: Update, context: CallbackContext) -> None:
+def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    await query.answer()
+    query.answer()
     if query.data == "task":
-        await task(update, context)
+        task(update, context)
     elif query.data == "extreme":
-        await extreme(update, context)
+        extreme(update, context)
     elif query.data == "earn":
-        await earn(update, context)
+        earn(update, context)
     elif query.data == "hypno":
-        await hypno(update, context)
+        hypno(update, context)
 
 # Добавляем обработчики в диспетчер
 dispatcher.add_handler(CommandHandler("start", start))
@@ -235,6 +235,7 @@ dispatcher.add_handler(CallbackQueryHandler(button))
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
+    logger.info(f"Received update: {update}")
     dispatcher.process_update(update)
     return "OK", 200
 
@@ -252,15 +253,16 @@ def health_check():
     logger.info("Received health check request")
     return "Bot is running", 200
 
-# Запуск приложения
+# Автоматическая установка вебхука при запуске
 if __name__ == "__main__":
+    # Для локального тестирования
     port = int(os.getenv("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-# В конец файла server.py
-if __name__ == "__main__":
-    # Для локального тестирования используем встроенный сервер Flask
-    port = int(os.getenv("PORT", 10000))
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'localhost')}/{TOKEN}"
+    bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
     app.run(host="0.0.0.0", port=port, debug=True)
 else:
-    # Для продакшена (gunicorn) ничего не делаем
-    pass
+    # Для продакшена (gunicorn)
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
