@@ -3,6 +3,7 @@ import sys
 import logging
 import random
 import fcntl
+import asyncio
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
@@ -14,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Константы
-TOKEN = os.getenv("BOT_TOKEN", "7622812077:AAGz1Jiaq5IXdfyhqZO3i4aXeHs8EgCOksg")
+TOKEN = os.getenv("BOT_TOKEN")
 MEDIA_PATH = "media"
 
 # Определение медиафайлов
@@ -245,13 +246,13 @@ def check_single_instance():
 if __name__ == "__main__":
     lock = check_single_instance()
     try:
-        # Для продакшн-среды используйте webhook
+        # Удаляем старый webhook
         logger.info("Удаление старого webhook")
-        application.bot.delete_webhook()
+        asyncio.run(application.bot.delete_webhook())
         logger.info("Запуск бота в режиме webhook")
         application.run_webhook(
             listen="0.0.0.0",
-            port=8443,
+            port=int(os.getenv("PORT", 10000)),  # Используем порт из переменной окружения, по умолчанию 10000
             url_path=TOKEN,
             webhook_url=f"https://<your-render-app>.onrender.com/{TOKEN}"
         )
