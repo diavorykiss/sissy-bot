@@ -4,10 +4,12 @@ import logging
 import random
 import fcntl
 import asyncio
+import threading
+import http.server
+import socketserver
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
-from aiohttp import web
 
 # Настройка логирования
 logging.basicConfig(
@@ -296,32 +298,27 @@ def check_single_instance():
         logger.error("Another instance of the bot is already running. Exiting...")
         sys.exit(1)
 
-# Фиктивный HTTP-сервер для Render (если используется Web Service)
-async def handle(request):
-    return web.Response(text="This is a dummy server for Render port binding.")
-
-async def start_dummy_server():
-    app = web.Application()
-    app.add_routes([web.get('/', handle)])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.getenv("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f"Dummy server started on port {port}")
+# Фиктивный HTTP-сервер для Web Service
+def start_dummy_server():
+    PORT = int(os.getenv("PORT", 10000))  # Render предоставляет переменную PORT
+    Handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        logger.info(f"Dummy server started on port {PORT}")
+        httpd.serve_forever()
 
 # Запуск бота
 if __name__ == "__main__":
     lock = check_single_instance()
     try:
+        # Запускаем фиктивный сервер в отдельном потоке
+        dummy_server_thread = threading.Thread(target=start_dummy_server, daemon=True)
+        dummy_server_thread.start()
+
         # Удаляем старый webhook
         logger.info("Удаление старого webhook")
         asyncio.run(application.bot.delete_webhook())
-        # Запускаем фиктивный сервер (если используете Web Service)
-        # Если используете Background Worker, закомментируйте эту строку
-        asyncio.run(start_dummy_server())
         logger.info("Запуск бота в режиме polling")
-        application.run_polling()
+        asyncio.run(application.run_polling())
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
     except Exception as e:
